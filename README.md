@@ -1,6 +1,6 @@
 # Lion Line: a Columbia commute agent
 
-**Deployed at:** https://REPLACE-WITH-YOUR-CLOUD-RUN-URL.run.app
+**Deployed at:** https://lion-line-git-754123787483.europe-west1.run.app
 
 Lion Line is a web chat agent for Columbia and Barnard students who ride the 1 train from
 116 St–Columbia University. It answers the questions you actually have while packing up in
