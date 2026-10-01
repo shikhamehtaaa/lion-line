@@ -12,13 +12,11 @@ All data sources are free and need no API key.
 
 | Tool | What it does | Data source |
 |---|---|---|
-| `catch_the_train` ⭐ | Combines your walk time to the station with live arrivals and gives a verdict per train: *easy walk (leave by 2:41)*, *leave right now*, *only if you run*, or *you'll miss it*. | MTA GTFS-realtime + campus map |
-| `estimate_walk` ⭐ | Walking and jogging time between places. Knows ~30 Columbia/Barnard buildings and dining halls by name (Butler, Lerner, John Jay, Mudd, SIPA, Hewitt, Manhattanville…), and geocodes any other NYC address. | Built-in campus table + OpenStreetMap Nominatim |
+| `catch_the_train` | Combines your walk time to the station with live arrivals and gives a verdict per train: *easy walk (leave by 2:41)*, *leave right now*, *only if you run*, or *you'll miss it*. | MTA GTFS-realtime + campus map |
+| `estimate_walk` | Walking and jogging time between places. Knows ~30 Columbia/Barnard buildings and dining halls by name (Butler, Lerner, John Jay, Mudd, SIPA, Hewitt, Manhattanville…), and geocodes any other NYC address. | Built-in campus table + OpenStreetMap Nominatim |
 | `get_next_trains` | Live 1/2/3 arrivals at any Broadway–7th Av line station, filterable by direction and route. | MTA GTFS-realtime (protobuf) |
 | `get_subway_alerts` | Active delays, suspensions and planned work for any subway route. | MTA alerts feed |
 | `get_weather` | Temperature, feels-like, wind and max rain chance over the next 4 hours. | Open-Meteo |
-
-⭐ = our original tools (one per team member).
 
 All tools return JSON. If something goes wrong, the tool returns an error and a hint, such as retrying with a recognized campus building, asking the user for their direction, or letting the user know that the MTA feed is unavailable. This lets the agent handle bad inputs and API/network issues without crashing.
 
