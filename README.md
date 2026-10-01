@@ -2,17 +2,9 @@
 
 **Deployed at:** https://lion-line-git-754123787483.europe-west1.run.app
 
-Lion Line is a web chat agent for Columbia and Barnard students who ride the 1 train from
-116 St–Columbia University. It answers the questions you actually have while packing up in
-Butler: *Can I make the next train? Should I run? Is the 1 even running? Do I need an umbrella?*
+Lion Line is a web chat agent for Columbia and Barnard students who take the subway from school. It helps answer practical questions when you're trying to leave campus: Can I catch the next train? Should I run? Is the 1 running normally? Do I need an umbrella?
 
-It uses **live data**, not guesses, and every tool call is shown in the chat as a card you
-can expand to see the raw arguments and result. The agent remembers the conversation, so
-once you've said you're in Mudd heading downtown, it reuses that for follow-ups.
-
-Built on the course's `gemini-web-tool-calling` starter (FastAPI + LiteLLM +
-`vertex_ai/gemini-3.5-flash-lite`). The `/chat` response keeps the starter's shape:
-`response`, `session_id`, `tool_calls` (each with `name`, `args`, `result`).
+The agent uses live data instead of making guesses. Each tool call also appears in the chat as an expandable card, so you can see the arguments sent to the tool and the result it returned. It also keeps track of the conversation. For example, if you tell it you're in Mudd and heading downtown, you don't have to repeat that when asking a follow-up question.
 
 ## Tools
 
@@ -28,9 +20,7 @@ All data sources are free and need no API key.
 
 ⭐ = our original tools (one per team member).
 
-Every tool returns JSON. Failures come back as `{"error": ..., "hint": ...}` telling the
-model what to do next (retry with a campus building name, ask the user for a direction,
-or say the MTA feed is down), so the chat never crashes on a bad argument or network error.
+All tools return JSON. If something goes wrong, the tool returns an error and a hint, such as retrying with a recognized campus building, asking the user for their direction, or letting the user know that the MTA feed is unavailable. This lets the agent handle bad inputs and API/network issues without crashing.
 
 ## Sample queries
 
@@ -41,32 +31,3 @@ or say the MTA feed is down), so the chat never crashes on a bad argument or net
 3. **"How long is the walk from Butler to the Hungarian Pastry Shop, and do I need an umbrella?"**
    → calls `estimate_walk` and `get_weather`. Follow up with *"ok what about from Lerner instead?"*
    to see it remember the destination.
-
-## Run locally
-
-1. A GCP project with billing and the Vertex AI (Agent Platform) API enabled.
-2. `gcloud auth application-default login`
-3. `uv run app.py`, then open http://localhost:8000
-
-## Deploy to Cloud Run (continuous deploy from GitHub)
-
-1. Push this repo to GitHub.
-2. In the Cloud Console: **Cloud Run → Create service → Continuously deploy from a repository**,
-   connect GitHub, pick this repo and branch `main`, build type **Dockerfile**.
-3. Settings:
-   - Authentication: **Allow unauthenticated invocations** (graders use a browser).
-   - **Maximum instances: 1**. Sessions live in memory, so a single instance keeps
-     every conversation on the same process.
-   - Container port: 8080 (the Dockerfile sets `PORT`).
-4. Give the service's runtime service account the **Vertex AI User** role
-   (`roles/aiplatform.user`) so it can call Gemini.
-5. Copy the service URL into `submission.json` and the top of this README.
-
-Optional env var: `MODEL` to override the LiteLLM model string.
-
-## Files
-
-- `app.py`: agent loop, session store, `/chat` and `/clear` endpoints
-- `tools.py`: the five tools and their JSON schemas
-- `index.html`: the Lion Line chat UI
-- `Dockerfile`: container for Cloud Run
