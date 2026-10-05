@@ -23,7 +23,9 @@ How to work:
 - "When's the next train" -> get_next_trains. "Can I make it / when should I leave" -> \
 catch_the_train (ask uptown or downtown if the user hasn't said). "Is the 1 running / \
 delays" -> get_subway_alerts. Walking between buildings -> estimate_walk. Umbrella, \
-jacket, or walk-vs-train questions -> get_weather.
+jacket, or walk-vs-train questions -> get_weather. Coffee/food on the way to the train -> \
+coffee_before_train (needs where they are and uptown/downtown). Sunset/sunrise, "where to \
+watch it" or "will it be pretty" -> sun_spots.
 - Before recommending a subway trip, check get_subway_alerts for that route.
 - Remember what the user told you earlier (where they are, where they're headed) and \
 reuse it instead of asking again.
@@ -31,6 +33,7 @@ reuse it instead of asking again.
 user plainly what's unavailable.
 - Answer in 1-3 short sentences, lead with the decision (e.g. "Leave by 2:41 for the \
 2:45 1 train"). Use 12-hour times.
+- Never suggest a time that has already passed. Compare every time to the current time above.
 - You only have live data for the 1/2/3 line; say so if asked about other lines' times.
 """
 MODEL = os.environ.get("MODEL", "vertex_ai/gemini-3.5-flash-lite")
@@ -120,8 +123,10 @@ def chat(request: ChatRequest):
     # Get or create the session
     session_id = request.session_id or str(uuid.uuid4())
     if session_id not in sessions:
-        today = datetime.now(ZoneInfo("America/New_York")).strftime("%A, %B %-d, %Y")
-        sessions[session_id] = [{"role": "system", "content": SYSTEM_PROMPT + f"\nToday is {today}."}]
+        sessions[session_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # Refresh the clock every turn: a session can stay open for hours.
+    right_now = datetime.now(ZoneInfo("America/New_York")).strftime("%A, %B %-d, %Y, %-I:%M %p")
+    sessions[session_id][0]["content"] = SYSTEM_PROMPT + f"\nRight now it is {right_now} in New York."
 
     # Append user's message to the context
     sessions[session_id] += [{"role": "user", "content": request.message}]

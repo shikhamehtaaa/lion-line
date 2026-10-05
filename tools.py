@@ -12,7 +12,7 @@ so the model can tell the user what went wrong or retry with better arguments.
 import json
 import math
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
@@ -407,6 +407,256 @@ def get_weather(place: str = "Columbia") -> str:
     })
 
 
+# --- Cafe / food spots for coffee_before_train ---
+# HAND-CURATED. Hours, prices, ratings and coordinates are approximate and written from
+# general knowledge, not a live source. Verify them on Google Maps and edit freely.
+# To add a spot, copy a dict. hours = [(days, open, close)], days 0=Mon..6=Sun; a close at or
+# before the open time means it runs past midnight. order_min = typical wait to get served.
+_ALL = (0, 1, 2, 3, 4, 5, 6)
+FOOD_SPOTS = [
+    {"name": "Hungarian Pastry Shop", "coords": PLACES["hungarian pastry shop"], "kinds": ("coffee", "food"),
+     "price": 1, "vibe": "cozy, cash-friendly, study-friendly", "rating": 4.5, "order_min": 4,
+     "hours": [(_ALL, "8:00", "23:30")]},
+    {"name": "Koronet Pizza", "coords": PLACES["koronet pizza"], "kinds": ("food",),
+     "price": 1, "vibe": "grab-and-go, huge slices", "rating": 4.0, "order_min": 5,
+     "hours": [(_ALL, "10:00", "01:00")]},
+    {"name": "Tom's Restaurant", "coords": (40.8056, -73.9655), "kinds": ("food", "coffee"),
+     "price": 2, "vibe": "sit-down diner", "rating": 3.5, "order_min": 20,
+     "hours": [(_ALL, "6:00", "01:00")]},
+    {"name": "Community Food & Juice", "coords": (40.8065, -73.9649), "kinds": ("food", "coffee"),
+     "price": 2, "vibe": "sit-down brunch spot", "rating": 4.0, "order_min": 25,
+     "hours": [(_ALL, "8:00", "21:00")]},
+    {"name": "Milano Market", "coords": (40.8063, -73.9651), "kinds": ("food", "coffee"),
+     "price": 1, "vibe": "deli, grab-and-go sandwiches", "rating": 4.0, "order_min": 4,
+     "hours": [(_ALL, "6:00", "23:00")]},
+    {"name": "Absolute Bagels", "coords": (40.8013, -73.9668), "kinds": ("food", "coffee"),
+     "price": 1, "vibe": "grab-and-go bagels, cash only", "rating": 4.5, "order_min": 6,
+     "hours": [(_ALL, "6:00", "19:00")]},
+]
+
+
+def _hm(s: str) -> int:
+    h, m = s.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _open_status(hours: list, when: datetime) -> tuple[bool, int | None]:
+    """(is_open, minutes_until_close) at a moment. Handles hours that run past midnight."""
+    wd, now_min = when.weekday(), when.hour * 60 + when.minute
+    for days, o, c in hours:
+        o_min, c_min = _hm(o), _hm(c)
+        overnight = c_min <= o_min
+        if wd in days and now_min >= o_min:
+            end = c_min + 1440 if overnight else c_min
+            if now_min < end:
+                return True, end - now_min
+        if overnight and (wd - 1) % 7 in days and now_min < c_min:  # yesterday's late hours
+            return True, c_min - now_min
+    return False, None
+
+
+def _station_coords(stop_id: str) -> tuple[float, float] | None:
+    coords = PLACES.get(STATIONS[stop_id].lower())
+    if coords:
+        return coords
+    try:
+        hit = _resolve_place(STATIONS[stop_id] + " subway station, Manhattan")
+    except requests.RequestException:
+        return None
+    return hit[:2] if hit else None
+
+
+def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_price: int = 3,
+                        station: str = "116 St-Columbia University", route: str = "") -> str:
+    """Cafes/food near campus the user can stop at and STILL catch a train, with when to leave."""
+    if kind not in ("coffee", "food", "any"):
+        return _error(f"Unknown kind '{kind}'.", "Use 'coffee', 'food' or 'any'.")
+    stop_id = _find_station(station)
+    if not stop_id:
+        return _error(f"'{station}' isn't a 1/2/3 station I know.",
+                      "Use e.g. '116 St-Columbia University' or 'Cathedral Pkwy (110 St)'.")
+    d = _normalize_direction(direction)
+    if not d:
+        return _error(f"Need a direction, got '{direction}'.",
+                      "Ask the user if they're going 'uptown' or 'downtown', then retry.")
+    try:
+        origin = _resolve_place(start)
+    except requests.RequestException as e:
+        return _error(f"Geocoding failed: {e}", "Retry with a campus building name.")
+    if origin is None:
+        return _error(f"Couldn't find '{start}'.", "Ask the user which building or corner they're at.")
+    station_coords = _station_coords(stop_id)
+    if station_coords is None:
+        return _error("Can only plan stops for stations near campus.",
+                      "Use 116 St, Cathedral Pkwy (110 St) or 125 St.")
+    try:
+        arrivals = _arrivals(stop_id, d, route)[:6]
+    except Exception as e:
+        return _error(f"MTA real-time feed unavailable: {e}", "Tell the user live times are unavailable.")
+    if not arrivals:
+        return _error("No upcoming trains in the live feed.", "Check get_subway_alerts for suspensions.")
+
+    now_ts = time.time()
+    now_dt = _now()
+    _, direct_walk = _walk_minutes(origin[:2], station_coords)
+
+    def first_catchable(total_min: float) -> int | None:
+        for i, a in enumerate(arrivals):
+            if (a["_ts"] - now_ts) / 60 - total_min >= 0:
+                return i
+        return None
+
+    base_i = first_catchable(direct_walk + STATION_BUFFER_MIN)
+    baseline = {
+        "train": f"{arrivals[base_i]['route']} at {arrivals[base_i]['arrives_at']}",
+        "leave_by": _clock(arrivals[base_i]["_ts"] - (direct_walk + STATION_BUFFER_MIN + 1) * 60),
+    } if base_i is not None else None
+
+    options = []
+    for spot in FOOD_SPOTS:
+        if (kind != "any" and kind not in spot["kinds"]) or spot["price"] > max_price:
+            continue
+        walk_in = _walk_minutes(origin[:2], spot["coords"])[1]
+        walk_out = _walk_minutes(spot["coords"], station_coords)[1]
+        total = walk_in + spot["order_min"] + walk_out + STATION_BUFFER_MIN
+        arrive_dt = now_dt + timedelta(minutes=walk_in)
+        is_open, left = _open_status(spot["hours"], arrive_dt)
+        if not is_open or left < spot["order_min"]:
+            continue  # closed, or closing before you'd be served
+        i = first_catchable(total)
+        if i is None:
+            continue
+        t = arrivals[i]
+        slack = (t["_ts"] - now_ts) / 60 - total
+        leave = t["_ts"] - (total + 1) * 60 if slack >= 2 else now_ts
+        options.append({
+            "place": spot["name"], "price": "$" * spot["price"], "vibe": spot["vibe"],
+            "our_rating": spot["rating"], "closes_in_min": left if left < 120 else None,
+            "walk_there_min": math.ceil(walk_in), "est_wait_min": spot["order_min"],
+            "catches_train": f"{t['route']} at {t['arrives_at']}",
+            "leave_by": "right now" if leave == now_ts else _clock(leave),
+            "makes_next_train": i == 0,
+            "extra_wait_vs_going_straight_min": (
+                round((t["_ts"] - arrivals[base_i]["_ts"]) / 60) if base_i is not None else None),
+            "_rank": (i, -spot["rating"], total),
+        })
+    options.sort(key=lambda o: o.pop("_rank"))
+
+    result = {
+        "from": origin[2], "station": STATIONS[stop_id],
+        "direction": "uptown" if d == "N" else "downtown",
+        "now": now_dt.strftime("%-I:%M %p"),
+        "going_straight_to_station": baseline,
+        "options": options[:4],
+        "note": "Hours, prices and ratings are approximate (our own take); wait times are estimates.",
+    }
+    if not options:
+        result["note"] = ("Nothing open fits before the next trains. Suggest going straight to the "
+                          "station, or relax the kind/max_price filters.")
+    return json.dumps(result)
+
+
+# --- Sunrise / sunset ---
+
+ARRIVE_EARLY_MIN = 15  # get there before the sky starts doing its thing
+# faces = which horizon the spot looks at. Hand-picked; double-check the views in person.
+SUN_SPOTS = [
+    {"name": "Riverside Park (Hudson overlook at 116th)", "coords": (40.8101, -73.9692), "faces": "west",
+     "note": "Open view over the Hudson toward New Jersey; the classic choice."},
+    {"name": "Sakura Park", "coords": (40.8131, -73.9623), "faces": "west",
+     "note": "Quieter lawn near Riverside Church; trees and buildings may clip the horizon."},
+    {"name": "Grant's Tomb plaza", "coords": (40.8134, -73.9631), "faces": "west",
+     "note": "Hilltop plaza next to Riverside Drive."},
+    {"name": "Morningside Park (east edge)", "coords": PLACES["morningside park"], "faces": "east",
+     "note": "Looks east over Harlem, the best nearby option for sunrise."},
+]
+
+
+def _sky_outlook(low: float, mid: float, high: float, rain: float) -> tuple[str, str]:
+    """Rule of thumb: high/mid clouds catch the color, low clouds or rain block the horizon."""
+    upper = max(mid, high)
+    if rain >= 60:
+        return "poor", f"{rain:.0f}% chance of rain around then."
+    if low >= 70:
+        return "poor", f"Low clouds ({low:.0f}%) will likely block the horizon."
+    if low <= 40 and 30 <= upper <= 85:
+        return "vivid", f"Clear horizon with {upper:.0f}% mid/high cloud to catch the color."
+    if low <= 40 and upper < 30:
+        return "clean but plain", "Mostly clear sky: a clean sunset but not much color."
+    return "decent", f"Mixed cloud (low {low:.0f}%, mid {mid:.0f}%, high {high:.0f}%)."
+
+
+def sun_spots(event: str = "sunset", start: str = "Columbia") -> str:
+    """Next sunrise/sunset time, a sky-quality outlook, and walking-time to nearby viewpoints."""
+    event = event.lower().strip()
+    if event not in ("sunrise", "sunset"):
+        return _error(f"Unknown event '{event}'.", "Use 'sunrise' or 'sunset'.")
+    try:
+        origin = _resolve_place(start)
+    except requests.RequestException as e:
+        return _error(f"Geocoding failed: {e}", "Retry with a campus building name.")
+    if origin is None:
+        return _error(f"Couldn't find '{start}'.", "Ask where the user is, or use 'Columbia'.")
+    try:
+        data = requests.get(
+            FORECAST_URL,
+            params={
+                "latitude": origin[0], "longitude": origin[1],
+                "daily": "sunrise,sunset",
+                "hourly": "cloud_cover_low,cloud_cover_mid,cloud_cover_high,"
+                          "precipitation_probability,apparent_temperature",
+                "temperature_unit": "fahrenheit", "timezone": "America/New_York", "forecast_days": 2,
+            },
+            timeout=10,
+        ).json()
+        daily, hourly = data["daily"], data["hourly"]
+    except (requests.RequestException, KeyError, ValueError) as e:
+        return _error(f"Weather service failed: {e}", "Tell the user sun times are unavailable right now.")
+
+    now = _now()
+    candidates = [datetime.fromisoformat(s).replace(tzinfo=NYC) for s in daily[event]]
+    ev = next((t for t in candidates if t > now), None)  # strictly in the future
+    if ev is None:
+        return _error(f"No upcoming {event} in the forecast.", "Tell the user and try again later.")
+    hour_key = (ev + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:00")
+    try:
+        i = hourly["time"].index(hour_key)
+    except ValueError:
+        return _error("Forecast doesn't cover that hour.", "Tell the user the sky outlook is unavailable.")
+    low, mid, high, rain = (hourly[k][i] or 0 for k in (
+        "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "precipitation_probability"))
+    label, why = _sky_outlook(low, mid, high, rain)
+
+    horizon = "west" if event == "sunset" else "east"
+    spots = []
+    for spot in SUN_SPOTS:
+        if spot["faces"] != horizon:
+            continue
+        walk = math.ceil(_walk_minutes(origin[:2], spot["coords"])[1])
+        leave_ts = ev.timestamp() - (walk + ARRIVE_EARLY_MIN) * 60
+        if leave_ts >= time.time():
+            status = f"leave by {_clock(leave_ts)}" + (" tomorrow" if ev.date() > now.date() else "")
+        else:
+            spare = round((ev.timestamp() - time.time()) / 60 - walk)
+            status = (f"leave now; you'd arrive about {spare} min before {event}" if spare > 0
+                      else f"you'd arrive after {event}")
+        spots.append({"place": spot["name"], "walk_min": walk, "plan": status, "note": spot["note"]})
+    spots.sort(key=lambda s: s["walk_min"])
+
+    is_tomorrow = ev.date() > now.date()
+    return json.dumps({
+        "now": now.strftime("%-I:%M %p"),
+        "event": event, "time": ev.strftime("%-I:%M %p"),
+        "day": "tomorrow" if is_tomorrow else "today",
+        "minutes_away": round((ev - now).total_seconds() / 60),
+        "sky_outlook": label, "why": why,
+        "feels_like_f_then": hourly["apparent_temperature"][i],
+        "from": origin[2], "spots": spots,
+        "note": ("Outlook is a rule-of-thumb from cloud layers, not a guarantee."
+                 + (f" Today's {event} has already passed, so this is tomorrow's." if is_tomorrow else "")),
+    })
+
+
 # --- What the model sees ---
 
 TOOLS = [
@@ -503,6 +753,50 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "coffee_before_train",
+            "description": (
+                "Finds cafes and food spots near the user that are open and that they can stop at and STILL "
+                "catch a train, with when to leave and how much extra waiting the stop costs. Use for 'can I "
+                "grab coffee before my train' or 'food on the way to the subway'. Needs where the user is and a "
+                "direction; ask if unclear. Prices, hours and ratings are approximate."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start": {"type": "string", "description": "Where the user is now, e.g. 'Butler' or 'Mudd'."},
+                    "direction": {"type": "string", "enum": ["uptown", "downtown"]},
+                    "kind": {"type": "string", "enum": ["coffee", "food", "any"], "description": "What they want. Default 'coffee'."},
+                    "max_price": {"type": "integer", "description": "Max price tier 1-3 ($ to $$$). Default 3."},
+                    "station": {"type": "string", "description": "Station to board at. Default '116 St-Columbia University'."},
+                    "route": {"type": "string", "enum": ["", "1", "2", "3"], "description": "Optional route filter."},
+                },
+                "required": ["start", "direction"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sun_spots",
+            "description": (
+                "Next sunrise or sunset time at Columbia, a sky-quality outlook from cloud cover and rain "
+                "chance (vivid / decent / clean but plain / poor), the feels-like temperature then, and nearby "
+                "viewpoints with walk time and when to leave. Use for 'where can I watch the sunset', "
+                "'is the sunset going to be good', or sunrise questions."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event": {"type": "string", "enum": ["sunset", "sunrise"], "description": "Default 'sunset'."},
+                    "start": {"type": "string", "description": "Where the user is now, e.g. 'Butler'. Default 'Columbia'."},
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 # What the harness runs: tool name -> Python function.
@@ -512,6 +806,8 @@ TOOL_MAP = {
     "estimate_walk": estimate_walk,
     "catch_the_train": catch_the_train,
     "get_weather": get_weather,
+    "coffee_before_train": coffee_before_train,
+    "sun_spots": sun_spots,
 }
 
 

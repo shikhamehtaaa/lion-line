@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Lion Line · Columbia Commute Agent</title>
+<title>Lion Line · Your Morningside Heights guide</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
@@ -12,114 +12,125 @@
     --navy-2: #173a63;
     --columbia: #b9d9eb;
     --red: #ee352e;      /* MTA 1/2/3 red */
-    --bg: #f4f6f9;
-    --card: #ffffff;
     --ink: #14202e;
     --muted: #5f6f82;
     --line: #dde3ea;
     --tool-bg: #f7f9fb;
-    --ok: #1b8a4b;
-    --warn: #c77700;
     --bad: #c62828;
+    --side-w: 310px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body {
     font-family: Inter, system-ui, sans-serif;
-    background: var(--bg);
     color: var(--ink);
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* Station-sign header */
-  header {
-    background: var(--navy);
-    color: #fff;
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    border-bottom: 6px solid #000;
-  }
-  .bullet {
-    width: 40px; height: 40px; border-radius: 50%;
-    background: var(--red); color: #fff;
-    display: grid; place-items: center;
-    font-weight: 700; font-size: 1.35rem; flex-shrink: 0;
-  }
-  header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.01em; }
-  header p { font-size: 0.82rem; color: var(--columbia); }
-  header .spacer { flex: 1; }
-  #new-chat {
-    background: transparent; color: #fff;
-    border: 1px solid rgba(255,255,255,0.4); border-radius: 6px;
-    padding: 7px 12px; font: inherit; font-size: 0.8rem; cursor: pointer;
-  }
-  #new-chat:hover { background: rgba(255,255,255,0.1); }
-
-  main {
-    flex: 1; min-height: 0;
     display: grid;
-    grid-template-columns: 290px 1fr;
-    max-width: 1180px; width: 100%;
-    margin: 0 auto;
-    gap: 20px; padding: 20px;
+    grid-template-columns: var(--side-w) 1fr;
+    height: 100vh; height: 100dvh;
+    overflow: hidden;
   }
 
-  /* Sidebar */
-  aside { display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
-  .panel {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 10px; padding: 16px;
+  /* ---------- Left panel ---------- */
+  aside {
+    background: #fff;
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    min-height: 0;
   }
-  .panel h2 {
-    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
-    color: var(--muted); margin-bottom: 10px;
+  .brand {
+    background: var(--navy); color: #fff;
+    padding: 18px 18px 16px;
+    border-bottom: 6px solid #000;
+    display: flex; gap: 12px; align-items: center;
   }
-  .panel p { font-size: 0.88rem; line-height: 1.5; }
+  .crown { width: 46px; height: 38px; flex-shrink: 0; }
+  .brand h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.01em; line-height: 1.1; }
+  .brand p { font-size: 0.76rem; color: var(--columbia); line-height: 1.35; margin-top: 3px; }
+
+  .side-scroll { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px; }
+  #new-chat {
+    width: 100%; background: var(--navy); color: #fff; border: 0; border-radius: 8px;
+    padding: 10px 12px; font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  #new-chat:hover { background: var(--navy-2); }
+  .section h2 {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin-bottom: 9px;
+  }
+  .section p { font-size: 0.86rem; line-height: 1.55; }
   .chip {
     display: block; width: 100%; text-align: left;
     background: var(--tool-bg); border: 1px solid var(--line);
     border-radius: 8px; padding: 9px 11px; margin-bottom: 8px;
-    font: inherit; font-size: 0.85rem; color: var(--ink); cursor: pointer;
+    font: inherit; font-size: 0.83rem; line-height: 1.4; color: var(--ink); cursor: pointer;
   }
   .chip:hover { border-color: var(--navy-2); background: #eef4fa; }
-  .toollist { list-style: none; font-size: 0.83rem; }
+  .toollist { list-style: none; font-size: 0.82rem; }
   .toollist li { padding: 6px 0; border-bottom: 1px dashed var(--line); line-height: 1.4; }
   .toollist li:last-child { border-bottom: 0; }
   .toollist code {
-    font-family: "JetBrains Mono", monospace; font-size: 0.78rem;
+    display: block;
+    font-family: "JetBrains Mono", monospace; font-size: 0.76rem;
     color: var(--navy-2); font-weight: 500;
   }
+  .toollist span { color: var(--muted); }
 
-  /* Chat */
+  /* ---------- Chat (full screen) ---------- */
   .chat {
-    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-    display: flex; flex-direction: column; min-height: 0;
+    position: relative;
+    display: flex; flex-direction: column; min-height: 0; min-width: 0;
+    background:
+      radial-gradient(900px 420px at 50% 100%, rgba(238,53,46,0.10), transparent 70%),
+      linear-gradient(180deg, #fbfcfe 0%, #e6f0f8 55%, #cfe4f1 100%);
   }
+
+  /* Soft drifting blobs behind the chat */
+  .chat { overflow: hidden; }
+  .blobs { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .blob {
+    position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.45;
+    will-change: transform;
+  }
+  .blob.b1 { width: 420px; height: 420px; background: #9cc9e6; top: -120px; left: 8%;  animation: drift1 22s ease-in-out infinite; }
+  .blob.b2 { width: 360px; height: 360px; background: #b9d9eb; top: 38%;  right: -90px; animation: drift2 28s ease-in-out infinite; }
+  .blob.b3 { width: 460px; height: 460px; background: #86b6dc; bottom: -180px; left: 22%; opacity: 0.35; animation: drift3 32s ease-in-out infinite; }
+  .blob.b4 { width: 280px; height: 280px; background: #cfe4f1; top: 14%; left: -80px; animation: drift2 26s ease-in-out infinite reverse; }
+  @keyframes drift1 { 0%,100% { transform: translate(0,0) scale(1); }   50% { transform: translate(90px,70px) scale(1.12); } }
+  @keyframes drift2 { 0%,100% { transform: translate(0,0) scale(1); }   50% { transform: translate(-80px,60px) scale(0.92); } }
+  @keyframes drift3 { 0%,100% { transform: translate(0,0) scale(1); }   50% { transform: translate(70px,-80px) scale(1.1); } }
+  .topbar, .hero, #messages, #input-area { position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) { .blob { animation: none; } }
+  .topbar { display: none; }
+  .hero { display: none; text-align: center; padding: 0 20px 22px; }
+  .hero .bullet { margin: 0 auto 14px; }
+  .hero h2 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.01em; }
+  .hero p { color: var(--muted); font-size: 0.95rem; margin-top: 6px; }
+  .bullet {
+    width: 54px; height: 54px; border-radius: 50%;
+    background: var(--red); color: #fff;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 1.8rem;
+  }
+
   #messages {
-    flex: 1; overflow-y: auto; padding: 22px;
+    flex: 1; overflow-y: auto; min-height: 0;
+    padding: 28px 24px 12px;
     display: flex; flex-direction: column; gap: 14px;
+    width: 100%; max-width: 820px; margin: 0 auto;
   }
-  .empty {
-    margin: auto; text-align: center; color: var(--muted); max-width: 380px;
-    font-size: 0.92rem; line-height: 1.55;
-  }
-  .empty .bullet { margin: 0 auto 12px; width: 54px; height: 54px; font-size: 1.8rem; }
   .msg {
-    max-width: 78%; padding: 10px 14px; border-radius: 12px;
+    max-width: 82%; padding: 10px 14px; border-radius: 14px;
     line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; word-wrap: break-word;
   }
   .msg.user { align-self: flex-end; background: var(--navy); color: #fff; border-bottom-right-radius: 4px; }
-  .msg.bot { align-self: flex-start; background: #eef3f8; border-bottom-left-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 4px; }
   .msg.loading { color: var(--muted); font-style: italic; }
 
-  /* Tool call cards */
   .toolcall {
-    align-self: flex-start; width: min(78%, 620px);
+    align-self: flex-start; width: min(82%, 640px);
     border: 1px solid var(--line); border-left: 4px solid var(--red);
-    background: var(--tool-bg); border-radius: 8px; font-size: 0.8rem;
+    background: #fff; border-radius: 8px; font-size: 0.8rem;
   }
   .toolcall summary {
     list-style: none; cursor: pointer; padding: 8px 12px;
@@ -139,98 +150,148 @@
     font-family: "JetBrains Mono", monospace; font-size: 0.75rem;
     white-space: pre-wrap; word-break: break-word;
     padding: 10px 12px; border-top: 1px solid var(--line); color: #33475b;
-    max-height: 260px; overflow: auto;
+    max-height: 260px; overflow: auto; background: var(--tool-bg);
   }
 
   #input-area {
-    display: flex; gap: 10px; padding: 14px; border-top: 1px solid var(--line);
+    width: 100%; max-width: 820px; margin: 0 auto;
+    padding: 12px 24px 24px;
   }
+  .composer {
+    display: flex; gap: 10px; align-items: center;
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 8px 8px 8px 16px;
+    box-shadow: 0 6px 24px rgba(15,42,74,0.10);
+  }
+  .composer:focus-within { border-color: var(--navy-2); box-shadow: 0 6px 24px rgba(15,42,74,0.16), 0 0 0 3px rgba(23,58,99,0.10); }
   #user-input {
-    flex: 1; padding: 11px 14px; border: 1px solid var(--line); border-radius: 8px;
-    font: inherit; font-size: 0.95rem; outline: none;
+    flex: 1; padding: 8px 0; border: 0; background: transparent;
+    font: inherit; font-size: 0.97rem; outline: none;
   }
-  #user-input:focus { border-color: var(--navy-2); box-shadow: 0 0 0 3px rgba(23,58,99,0.12); }
   #send-btn {
-    background: var(--red); color: #fff; border: 0; border-radius: 8px;
-    padding: 0 18px; font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--red); color: #fff; border: 0; border-radius: 10px;
+    padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer;
   }
   #send-btn:disabled { opacity: 0.45; cursor: default; }
 
+  /* Empty state: greeting + composer centered, like a landing prompt */
+  .chat.is-empty { justify-content: center; align-items: center; }
+  .chat.is-empty .hero { display: block; }
+  .chat.is-empty #messages { display: none; }
+  .chat.is-empty #input-area { padding-bottom: 0; max-width: 700px; }
+
+  /* ---------- Mobile ---------- */
   @media (max-width: 820px) {
-    main { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
-    aside { order: 2; }
-    .chat { min-height: 70vh; }
-    .msg, .toolcall { max-width: 92%; width: auto; }
-    header p { display: none; }
+    body { grid-template-columns: 1fr; }
+    aside {
+      position: fixed; inset: 0 auto 0 0; width: min(86vw, var(--side-w)); z-index: 20;
+      transform: translateX(-100%); transition: transform 0.2s ease;
+      box-shadow: 4px 0 24px rgba(0,0,0,0.2);
+    }
+    body.menu-open aside { transform: none; }
+    .topbar {
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      background: var(--navy); color: #fff; font-weight: 700;
+    }
+    .topbar button {
+      background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer;
+    }
+    #messages { padding: 16px 12px 8px; }
+    #input-area { padding: 10px 12px 16px; }
+    .msg, .toolcall { max-width: 94%; width: auto; }
+    .hero h2 { font-size: 1.5rem; }
   }
 </style>
 </head>
 <body>
-<header>
-  <div class="bullet">1</div>
-  <div>
-    <h1>Lion Line</h1>
-    <p>Live commute help for Columbia &amp; Barnard · 116 St–Columbia University</p>
-  </div>
-  <div class="spacer"></div>
-  <button id="new-chat" title="Start a fresh session">New chat</button>
-</header>
-
-<main>
-  <aside>
-    <div class="panel">
-      <h2>What I do</h2>
-      <p>I check <strong>live MTA data</strong> for the 1/2/3, service alerts for any line,
-        campus walking times and the weather, then tell you when to leave. Tell me where you are
-        and where you're headed; I'll remember it for the rest of the chat.</p>
+<aside id="sidebar">
+  <div class="brand">
+    <!-- Simple crown mark. To use the official Columbia crown, replace this <svg> with an <img>
+         (follow Columbia's brand guidelines for logo use). -->
+    <svg class="crown" viewBox="0 0 64 50" aria-label="Crown" role="img">
+      <path d="M6 38 L9 15 L22 27 L32 9 L42 27 L55 15 L58 38 Z" fill="#fff"/>
+      <rect x="6" y="41" width="52" height="7" rx="2" fill="#b9d9eb"/>
+      <circle cx="9" cy="12" r="3.4" fill="#b9d9eb"/>
+      <circle cx="32" cy="6" r="3.4" fill="#b9d9eb"/>
+      <circle cx="55" cy="12" r="3.4" fill="#b9d9eb"/>
+    </svg>
+    <div>
+      <h1>Lion Line</h1>
+      <p>Trains, walks, coffee stops &amp; sunsets for Morningside Heights</p>
     </div>
-    <div class="panel">
+  </div>
+
+  <div class="side-scroll">
+    <button id="new-chat" title="Start a fresh session">+ New chat</button>
+
+    <div class="section">
+      <h2>What I do</h2>
+      <p>I'm your Morningside Heights sidekick. I check live MTA data for the 1/2/3
+        and service alerts, work out campus walking times, and read the weather, then tell you when to
+        leave. I can also find a coffee or food stop that still makes your train, and
+        the best place to catch the sunset or sunrise. Tell me where you are and where
+        you're headed; I'll remember it for the rest of the chat.</p>
+    </div>
+
+    <div class="section">
       <h2>Try asking</h2>
       <button class="chip">I'm in Mudd heading downtown. Can I make the next 1 train?</button>
-      <button class="chip">When's the next uptown train at 116th?</button>
+      <button class="chip">I'm in Butler heading downtown. Can I grab a coffee and still catch the train?</button>
+      <button class="chip">Where should I watch the sunset tonight?</button>
       <button class="chip">Is the 1 train delayed right now?</button>
       <button class="chip">How long is the walk from Butler to the Hungarian Pastry Shop, and do I need an umbrella?</button>
     </div>
-    <div class="panel">
+
+    <div class="section">
       <h2>Tools</h2>
       <ul class="toollist">
-        <li><code>get_next_trains</code> live 1/2/3 arrivals</li>
-        <li><code>catch_the_train</code> walk vs. run vs. missed, for each train</li>
-        <li><code>get_subway_alerts</code> delays &amp; planned work</li>
-        <li><code>estimate_walk</code> campus buildings &amp; NYC addresses</li>
-        <li><code>get_weather</code> temperature &amp; rain chance</li>
+        <li><code>get_next_trains</code><span>live 1/2/3 arrivals</span></li>
+        <li><code>catch_the_train</code><span>walk vs. run vs. missed, for each train</span></li>
+        <li><code>coffee_before_train</code><span>a cafe stop that still makes your train</span></li>
+        <li><code>get_subway_alerts</code><span>delays &amp; planned work</span></li>
+        <li><code>estimate_walk</code><span>campus buildings &amp; NYC addresses</span></li>
+        <li><code>get_weather</code><span>temperature &amp; rain chance</span></li>
+        <li><code>sun_spots</code><span>sunrise/sunset time, sky outlook &amp; viewpoints</span></li>
       </ul>
     </div>
-  </aside>
+  </div>
+</aside>
 
-  <section class="chat">
-    <div id="messages">
-      <div class="empty" id="empty">
-        <div class="bullet">1</div>
-        Ask about the next train, delays, how long a walk takes, or whether you'll make it.<br />
-        Tool calls show up as red-edged cards; click one to see the raw data.
-      </div>
-    </div>
-    <div id="input-area">
+<section class="chat is-empty" id="chat">
+  <div class="blobs" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div></div>
+  <div class="topbar">
+    <button id="menu-btn" aria-label="Open menu">☰ Menu</button>
+    <span>Lion Line</span>
+  </div>
+
+  <div class="hero">
+    <div class="bullet">1</div>
+    <h2>Where to today?</h2>
+    <p>Ask about trains, delays, walks, coffee on the way, or the sunset.</p>
+  </div>
+
+  <div id="messages"></div>
+
+  <div id="input-area">
+    <div class="composer">
       <input type="text" id="user-input" placeholder="e.g. I'm at Lerner, going uptown. When should I leave?" autocomplete="off" />
       <button id="send-btn">Send</button>
     </div>
-  </section>
-</main>
+  </div>
+</section>
 
 <script>
+  const chat = document.getElementById("chat");
   const messages = document.getElementById("messages");
   const userInput = document.getElementById("user-input");
   const sendBtn = document.getElementById("send-btn");
   let sessionId = null;  // one session per page load; the server keeps the history
 
-  function clearEmpty() {
-    const empty = document.getElementById("empty");
-    if (empty) empty.remove();
-  }
+  function leaveEmptyState() { chat.classList.remove("is-empty"); }
 
   function addMessage(kind, text) {
-    clearEmpty();
+    leaveEmptyState();
     const div = document.createElement("div");
     div.className = "msg " + kind;
     div.textContent = text;          // textContent, never innerHTML: user text isn't trusted
@@ -274,6 +335,7 @@
   async function send(textOverride) {
     const text = (textOverride ?? userInput.value).trim();
     if (!text || sendBtn.disabled) return;
+    document.body.classList.remove("menu-open");
     userInput.value = "";
     sendBtn.disabled = true;
     addMessage("user", text);
@@ -307,6 +369,7 @@
     location.reload();
   });
 
+  document.getElementById("menu-btn").addEventListener("click", () => document.body.classList.toggle("menu-open"));
   document.querySelectorAll(".chip").forEach((chip) =>
     chip.addEventListener("click", () => send(chip.textContent))
   );
