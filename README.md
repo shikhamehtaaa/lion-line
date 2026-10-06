@@ -2,7 +2,7 @@
 
 **Deployed at:** https://lion-line-git-754123787483.europe-west1.run.app
 
-Lion Line is a web chat agent for Columbia and Barnard students who take the subway from school. It helps answer practical questions when you're trying to leave campus: Can I catch the next train? Should I run? Is the 1 running normally? Do I need an umbrella? Where can I grab coffee?
+Lion Line is a web chat agent for Columbia and Barnard students navigating the Morningside campus. It helps respond to a mix of practical and more recreational concerns, from estimated time to the next uptown 1 train to finding nearby spots to grab coffee or watch the sunset.
 
 The agent uses live data instead of making guesses. Each tool call also appears in the chat as an expandable card, so you can see the arguments sent to the tool and the result it returned. It also keeps track of the conversation. For example, if you tell it you're in Mudd and heading downtown, you don't have to repeat that when asking a follow-up question.
 
@@ -32,6 +32,6 @@ All tools return JSON. If something goes wrong, the tool returns an error and a 
    → calls `estimate_walk` and `get_weather`. Follow up with *"ok what about from Lerner instead?"*
    to see it remember the destination.
 4. **"I'm in Butler heading downtown. Can I grab a coffee and still catch the train?"**
-   → calls `coffee_before_train` and lists spots with a leave-by time.
+   → calls `coffee_before_train` and lists spots with a leave-by time. 
 5. **"Where should I watch the sunset tonight?"**
    → calls `sun_spots` for the time, sky outlook and viewpoints.
