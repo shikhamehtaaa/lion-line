@@ -30,8 +30,8 @@ All tools return JSON. If something goes wrong, the tool returns an error and a 
    - Calls `coffee_before_train` and lists open spots with a leave-by time. Displays map of route.
 3. **"Where should I watch the sunset tonight?"**
    - Calls `sun_spots` for the time, sky outlook and viewpoints.
-4. **"Is the 1 train delayed right now? What about the A?"**
-   - Calls `get_subway_alerts` for route 1, then route A.
+4. **"Is the 1 train delayed right now?"**
+   - Calls `get_subway_alerts` for route 1.
 5. **"How long is the walk from Butler to the Hungarian Pastry Shop, and do I need an umbrella?"**
    - Calls `estimate_walk` and `get_weather`. Follow up with *"ok what about from Lerner instead?"*
    to see it remember the destination.
