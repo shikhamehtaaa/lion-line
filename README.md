@@ -25,13 +25,13 @@ All tools return JSON. If something goes wrong, the tool returns an error and a 
 ## Sample queries
 
 1. **"I'm in Mudd heading downtown. Can I make the next 1 train?"**
-   → calls `catch_the_train` (and usually `get_subway_alerts`) and tells you when to leave.
-2. **"Is the 1 train delayed right now? What about the A?"**
-   → calls `get_subway_alerts` for route 1, then route A.
-3. **"How long is the walk from Butler to the Hungarian Pastry Shop, and do I need an umbrella?"**
-   → calls `estimate_walk` and `get_weather`. Follow up with *"ok what about from Lerner instead?"*
+    - Calls `catch_the_train`, and usually `get_subway_alerts`, and tells you when to leave. Displays map of route.
+2. **"I'm in Butler heading downtown. Can I grab a coffee and still catch the train?"**
+   - Calls `coffee_before_train` and lists open spots with a leave-by time. Displays map of route.
+3. **"Where should I watch the sunset tonight?"**
+   - Calls `sun_spots` for the time, sky outlook and viewpoints.
+4. **"Is the 1 train delayed right now? What about the A?"**
+   - Calls `get_subway_alerts` for route 1, then route A.
+5. **"How long is the walk from Butler to the Hungarian Pastry Shop, and do I need an umbrella?"**
+   - Calls `estimate_walk` and `get_weather`. Follow up with *"ok what about from Lerner instead?"*
    to see it remember the destination.
-4. **"I'm in Butler heading downtown. Can I grab a coffee and still catch the train?"**
-   → calls `coffee_before_train` and lists spots with a leave-by time. 
-5. **"Where should I watch the sunset tonight?"**
-   → calls `sun_spots` for the time, sky outlook and viewpoints.
