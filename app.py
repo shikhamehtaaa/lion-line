@@ -42,7 +42,7 @@ user plainly what's unavailable.
 MODEL = os.environ.get("MODEL", "vertex_ai/gemini-3.5-flash-lite")
 MAX_TOOL_ROUNDS = 6
 
-# harness
+# The Harness
 
 
 def run_agent(messages: list[dict]) -> tuple[str, list[dict]]:
@@ -90,17 +90,24 @@ def run_agent(messages: list[dict]) -> tuple[str, list[dict]]:
                 result = json.dumps({"error": "Tool arguments were not valid JSON. Retry with a JSON object."})
             tool_calls += [{"name": call.function.name, "args": args, "result": result}]
 
-            messages += [{"role": "tool", "tool_call_id": call.id, "content": result}]
+            model_result = result
+            try:
+                parsed = json.loads(result)
+                if isinstance(parsed, dict) and "map" in parsed:
+                    model_result = json.dumps({k: v for k, v in parsed.items() if k != "map"})
+            except json.JSONDecodeError:
+                pass
+            messages += [{"role": "tool", "tool_call_id": call.id, "content": model_result}]
 
     return "Sorry, I hit my tool-call limit before finishing.", tool_calls
 
 
-# Session Store
+# session store
 
 # session_id -> list of messages. In-memory, single process.
 sessions: dict[str, list] = {}
 
-# FastAPI App
+# FastAPI app
 
 app = FastAPI()
 
@@ -137,7 +144,6 @@ def chat(request: ChatRequest):
     try:
         response, tool_calls = run_agent(sessions[session_id])
     except Exception as e:
-        # Auth, billing, a model that is not running: show it in the chat, not as a 500.
         response, tool_calls = f"Model call failed: {type(e).__name__}: {str(e)[:300]}", []
 
     return ChatResponse(response=response or "(no response)", session_id=session_id, tool_calls=tool_calls)
@@ -150,5 +156,4 @@ def clear(session_id: str | None = None):
 
 
 if __name__ == "__main__":
-    # Cloud Run tells us which port to listen on; locally this defaults to 8000.
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

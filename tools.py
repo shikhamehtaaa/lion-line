@@ -20,7 +20,7 @@ from google.transit import gtfs_realtime_pb2
 
 NYC = ZoneInfo("America/New_York")
 
-# Data sources (all free)
+# Data sources (all free, no key)
 
 MTA_123_FEED = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs"
 MTA_ALERTS_FEED = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json"
@@ -378,6 +378,7 @@ def catch_the_train(start: str, direction: str, station: str = "116 St-Columbia 
         "via_gate": gate,
         "now": _now().strftime("%-I:%M %p"),
         "trains": plan,
+        "map": _map_payload([(origin[2], origin[:2], "start"), (STATIONS[stop_id], station_coords, "station")], [gate]),
     }
     if not plan:
         result["note"] = "No upcoming trains in the live feed; check get_subway_alerts for suspensions."
@@ -417,11 +418,8 @@ def get_weather(place: str = "Columbia") -> str:
     })
 
 
-# --- Cafe / food spots for coffee_before_train ---
-# HAND-CURATED. Hours, prices, ratings and coordinates are approximate and written from
-# general knowledge, not a live source. Verify them on Google Maps and edit freely.
-# To add a spot, copy a dict. hours = [(days, open, close)], days 0=Mon..6=Sun; a close at or
-# before the open time means it runs past midnight. order_min = typical wait to get served.
+# Cafe / food spots for coffee_before_train
+# Hours, prices, ratings and coordinates are approximate
 _ALL = (0, 1, 2, 3, 4, 5, 6)
 FOOD_SPOTS = [
     {"name": "Hungarian Pastry Shop", "coords": PLACES["hungarian pastry shop"], "kinds": ("coffee", "food"),
@@ -476,10 +474,7 @@ def _station_coords(stop_id: str) -> tuple[float, float] | None:
     return hit[:2] if hit else None
 
 
-# --- Campus gates ---
-# Columbia limits campus entry and exit to a few gates, so a walk that crosses the campus
-# boundary has to go through one. Hours use the same format as FOOD_SPOTS. Coordinates are
-# approximate: check them on a map. To add a gate, copy a dict.
+# Campus gates (hard-coded entries and exits from knowledge of campus)
 CAMPUS_GATES = [
     {"name": "116th & Broadway gate", "coords": (40.8077, -73.9635), "hours": [(_ALL, "0:00", "24:00")],
      "id_to_enter": True, "id_to_exit": False},
@@ -528,6 +523,26 @@ def _route(a: tuple[float, float], b: tuple[float, float]) -> tuple[float, float
         "needs_id": gate["id_to_enter"] if entering else gate["id_to_exit"],
         "adds_minutes": max(0, round((meters - direct_m) / WALK_M_PER_MIN)),
     }
+
+
+def _gate_coords(info: dict | None) -> tuple[float, float] | None:
+    if info and "gate" in info:
+        return next(g["coords"] for g in CAMPUS_GATES if g["name"] == info["gate"])
+    return None
+
+
+def _map_payload(stops: list[tuple[str, tuple[float, float], str]], gates: list[dict | None]) -> dict:
+    """Markers and a path for the UI map. stops = [(label, coords, kind)] in order;
+    gates[i] is the gate info for the leg from stops[i] to stops[i + 1]."""
+    points, path = [], []
+    for i, (label, coords, kind) in enumerate(stops):
+        points.append({"label": label, "lat": coords[0], "lon": coords[1], "kind": kind})
+        path.append([coords[0], coords[1]])
+        gc = _gate_coords(gates[i]) if i < len(gates) else None
+        if gc:
+            points.append({"label": gates[i]["gate"], "lat": gc[0], "lon": gc[1], "kind": "gate"})
+            path.append([gc[0], gc[1]])
+    return {"points": points, "path": path}
 
 
 def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_price: int = 3,
@@ -581,7 +596,7 @@ def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_pr
         if (kind != "any" and kind not in spot["kinds"]) or spot["price"] > max_price:
             continue
         _, walk_in, gate_in = _route(origin[:2], spot["coords"])
-        _, walk_out, _ = _route(spot["coords"], station_coords)
+        _, walk_out, gate_out = _route(spot["coords"], station_coords)
         total = walk_in + spot["order_min"] + walk_out + STATION_BUFFER_MIN
         arrive_dt = now_dt + timedelta(minutes=walk_in)
         is_open, left = _open_status(spot["hours"], arrive_dt)
@@ -602,9 +617,19 @@ def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_pr
             "makes_next_train": i == 0,
             "extra_wait_vs_going_straight_min": (
                 round((t["_ts"] - arrivals[base_i]["_ts"]) / 60) if base_i is not None else None),
-            "_rank": (i, -spot["rating"], total),
+            "_rank": (i, -spot["rating"], total), "_coords": spot["coords"], "_gate_out": gate_out,
         })
     options.sort(key=lambda o: o.pop("_rank"))
+    route_map = None
+    if options:  # map the best option: start -> cafe -> station
+        top = options[0]
+        route_map = _map_payload(
+            [(origin[2], origin[:2], "start"), (top["place"], top["_coords"], "stop"),
+             (STATIONS[stop_id], station_coords, "station")],
+            [top["via_gate"], top["_gate_out"]],
+        )
+    for o in options:
+        o.pop("_coords"), o.pop("_gate_out")
 
     result = {
         "from": origin[2], "station": STATIONS[stop_id],
@@ -614,6 +639,8 @@ def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_pr
         "options": options[:4],
         "note": "Hours, prices and ratings are approximate (our own take); wait times are estimates.",
     }
+    if route_map:
+        result["map"] = route_map
     if not options:
         result["note"] = ("Nothing open fits before the next trains. Suggest going straight to the "
                           "station, or relax the kind/max_price filters.")
@@ -622,7 +649,7 @@ def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_pr
 
 # --- Sunrise / sunset ---
 
-ARRIVE_EARLY_MIN = 15  # get there before the sky starts doing its thing
+ARRIVE_EARLY_MIN = 15  # added time buffer
 # faces = which horizon the spot looks at. Hand-picked; double-check the views in person.
 SUN_SPOTS = [
     {"name": "Riverside Park (Hudson overlook at 116th)", "coords": (40.8101, -73.9692), "faces": "west",

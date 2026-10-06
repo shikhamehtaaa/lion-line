@@ -6,6 +6,8 @@
 <title>Lion Line · Your Morningside Heights guide</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root {
     --navy: #0f2a4a;
@@ -153,6 +155,17 @@
     max-height: 260px; overflow: auto; background: var(--tool-bg);
   }
 
+
+  /* Route map card */
+  .mapcard {
+    align-self: flex-start; width: min(82%, 640px); height: 280px;
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #e8eef4;
+  }
+  .map-label {
+    background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 6px;
+    font: 600 11px Inter, sans-serif; padding: 2px 6px; box-shadow: none;
+  }
+  .map-label::before { display: none; }
   #input-area {
     width: 100%; max-width: 820px; margin: 0 auto;
     padding: 12px 24px 24px;
@@ -200,6 +213,7 @@
     #messages { padding: 16px 12px 8px; }
     #input-area { padding: 10px 12px 16px; }
     .msg, .toolcall { max-width: 94%; width: auto; }
+    .mapcard { width: 94%; height: 240px; }
     .hero h2 { font-size: 1.5rem; }
   }
 </style>
@@ -207,8 +221,6 @@
 <body>
 <aside id="sidebar">
   <div class="brand">
-    <!-- Simple crown mark. To use the official Columbia crown, replace this <svg> with an <img>
-         (follow Columbia's brand guidelines for logo use). -->
     <svg class="crown" viewBox="0 0 64 50" aria-label="Crown" role="img">
       <path d="M6 38 L9 15 L22 27 L32 9 L42 27 L55 15 L58 38 Z" fill="#fff"/>
       <rect x="6" y="41" width="52" height="7" rx="2" fill="#b9d9eb"/>
@@ -300,10 +312,40 @@
     return div;
   }
 
+
+  const MAP_LABEL_DIR = { start: "bottom", stop: "bottom", gate: "right", station: "top" };
+  const MAP_COLORS = { start: "#173a63", stop: "#e08a00", station: "#ee352e", gate: "#1b8a4b" };
+
+  function addRouteMap(map, before) {
+    if (!window.L || !map || !map.path || map.path.length < 2) return;  // fail quietly: text answer still works
+    try {
+      const box = document.createElement("div");
+      box.className = "mapcard";
+      messages.insertBefore(box, before);
+      const m = L.map(box, { scrollWheelZoom: false, attributionControl: true });
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+      }).addTo(m);
+      const line = L.polyline(map.path, { color: "#ee352e", weight: 5, opacity: 0.85 }).addTo(m);
+      for (const p of map.points) {
+        L.circleMarker([p.lat, p.lon], {
+          radius: p.kind === "gate" ? 6 : 8, color: "#fff", weight: 2,
+          fillColor: MAP_COLORS[p.kind] || "#173a63", fillOpacity: 1,
+        }).addTo(m).bindTooltip(p.label, {
+          permanent: true, className: "map-label",
+          direction: MAP_LABEL_DIR[p.kind] || "top", offset: MAP_LABEL_DIR[p.kind] === "right" ? [8, 0] : [0, 0],
+        });
+      }
+      m.fitBounds(line.getBounds(), { padding: [40, 40], maxZoom: 17 });
+      setTimeout(() => m.invalidateSize(), 0);
+    } catch (e) { /* map added on, but will never break the chat */ }
+  }
+
   function addToolCall(call, before) {
-    let pretty = call.result, isError = false;
+    let pretty = call.result, isError = false, routeMap = null;
     try {
       const parsed = JSON.parse(call.result);
+      routeMap = parsed && parsed.map;
       isError = parsed && typeof parsed === "object" && "error" in parsed;
       pretty = JSON.stringify(parsed, null, 2);
     } catch (e) {}
@@ -330,6 +372,7 @@
     pre.textContent = pretty;
     details.append(summary, pre);
     messages.insertBefore(details, before);
+    addRouteMap(routeMap, before);
   }
 
   async function send(textOverride) {
