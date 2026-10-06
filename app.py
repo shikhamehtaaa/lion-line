@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from tools import TOOLS, run_tool
 
-# --- Config ---
+# configs
 
 SYSTEM_PROMPT = """You are Lion Line, a commute helper for Columbia and Barnard students in \
 Morningside Heights, NYC. The home station is 116 St-Columbia University on the 1 train.
@@ -27,6 +27,9 @@ jacket, or walk-vs-train questions -> get_weather. Coffee/food on the way to the
 coffee_before_train (needs where they are and uptown/downtown). Sunset/sunrise, "where to \
 watch it" or "will it be pretty" -> sun_spots.
 - Before recommending a subway trip, check get_subway_alerts for that route.
+- Walks that cross the campus boundary go through Columbia's gates (116th & Broadway, 116th & \
+Amsterdam, 120th & Broadway). When a result has via_gate, name the gate; if needs_id is true, \
+remind the user to have their ID ready. Entering needs ID, exiting doesn't.
 - Remember what the user told you earlier (where they are, where they're headed) and \
 reuse it instead of asking again.
 - If a tool returns an error, follow its hint: retry with better arguments or tell the \
@@ -39,7 +42,7 @@ user plainly what's unavailable.
 MODEL = os.environ.get("MODEL", "vertex_ai/gemini-3.5-flash-lite")
 MAX_TOOL_ROUNDS = 6
 
-# --- The Harness ---
+# harness
 
 
 def run_agent(messages: list[dict]) -> tuple[str, list[dict]]:
@@ -92,12 +95,12 @@ def run_agent(messages: list[dict]) -> tuple[str, list[dict]]:
     return "Sorry, I hit my tool-call limit before finishing.", tool_calls
 
 
-# --- Session Store ---
+# Session Store
 
 # session_id -> list of messages. In-memory, single process.
 sessions: dict[str, list] = {}
 
-# --- FastAPI App ---
+# FastAPI App
 
 app = FastAPI()
 

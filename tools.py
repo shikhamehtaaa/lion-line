@@ -20,7 +20,7 @@ from google.transit import gtfs_realtime_pb2
 
 NYC = ZoneInfo("America/New_York")
 
-# --- Data sources (all free, no key) ---
+# Data sources (all free)
 
 MTA_123_FEED = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs"
 MTA_ALERTS_FEED = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json"
@@ -29,7 +29,7 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 # Nominatim's usage policy requires an identifying User-Agent.
 HEADERS = {"User-Agent": "columbia-commuter-agent/1.0 (class project)"}
 
-# --- Static reference data ---
+# Static reference data tables
 
 # Broadway-7th Av line (1/2/3) stations in Manhattan and the Bronx, GTFS stop_id -> name.
 # The 2/3 only stop at the express stations (96, 72, Times Sq, 34, 14, Chambers).
@@ -73,7 +73,7 @@ PLACES = {
     "pupin hall": (40.8099, -73.9612),
     "mudd": (40.8094, -73.9600),
     "uris hall": (40.8090, -73.9612),
-    "dodge fitness center": (40.8093, -73.9628),
+    "dodge fitness center": (40.8093, -73.9620),
     "international affairs building": (40.8078, -73.9597),
     "sipa": (40.8078, -73.9597),
     "teachers college": (40.8104, -73.9601),
@@ -95,7 +95,7 @@ GRID_FACTOR = 1.25   # streets aren't straight lines; scales crow-flies distance
 STATION_BUFFER_MIN = 1.5  # stairs + OMNY tap + getting to the platform
 
 
-# --- Helpers ---
+# Helpers
 
 
 def _error(message: str, hint: str = "") -> str:
@@ -153,7 +153,13 @@ def _resolve_place(place: str) -> tuple[float, float, str] | None:
 
 
 def _walk_minutes(a: tuple[float, float], b: tuple[float, float]) -> tuple[float, float]:
-    """Return (meters, minutes) for walking between two lat/lon points."""
+    """Return (meters, minutes) for walking between two lat/lon points, via campus gates if needed."""
+    meters, minutes, _ = _route(a, b)
+    return meters, minutes
+
+
+def _straight_walk(a: tuple[float, float], b: tuple[float, float]) -> tuple[float, float]:
+    """Return (meters, minutes) between two points, ignoring campus gates."""
     lat1, lon1, lat2, lon2 = map(math.radians, (*a, *b))
     h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
     meters = 2 * 6_371_000 * math.asin(math.sqrt(h)) * GRID_FACTOR
@@ -213,7 +219,7 @@ def _arrivals(stop_id: str, direction: str, route: str = "") -> list[dict]:
     return sorted(out, key=lambda a: a["_ts"])
 
 
-# --- Tools ---
+# Tools
 
 
 def get_next_trains(station: str = "116 St-Columbia University", direction: str = "both",
@@ -300,14 +306,17 @@ def estimate_walk(origin: str, destination: str) -> str:
             "Try a campus building (Butler, Lerner, Mudd, SIPA, Barnard...) or an address like "
             "'Broadway and 110th St, New York'.",
         )
-    meters, minutes = _walk_minutes(a[:2], b[:2])
-    return json.dumps({
+    meters, minutes, gate = _route(a[:2], b[:2])
+    result = {
         "from": a[2], "to": b[2],
         "distance_miles": round(meters / 1609, 2),
         "walk_minutes": math.ceil(minutes),
         "jog_minutes": math.ceil(meters / JOG_M_PER_MIN),
         "note": "Estimate based on straight-line distance adjusted for the street grid.",
-    })
+    }
+    if gate:
+        result["via_gate"] = gate
+    return json.dumps(result)
 
 
 def catch_the_train(start: str, direction: str, station: str = "116 St-Columbia University",
@@ -338,7 +347,7 @@ def catch_the_train(start: str, direction: str, station: str = "116 St-Columbia 
                           "Use 116 St, Cathedral Pkwy (110 St) or 125 St.")
         station_coords = hit[:2]
 
-    meters, walk_min = _walk_minutes(origin[:2], station_coords)
+    meters, walk_min, gate = _route(origin[:2], station_coords)
     jog_min = meters / JOG_M_PER_MIN
     try:
         arrivals = _arrivals(stop_id, d, route)[:5]
@@ -366,6 +375,7 @@ def catch_the_train(start: str, direction: str, station: str = "116 St-Columbia 
         "from": origin[2], "station": STATIONS[stop_id],
         "direction": "uptown" if d == "N" else "downtown",
         "walk_to_station_minutes": math.ceil(walk_min),
+        "via_gate": gate,
         "now": _now().strftime("%-I:%M %p"),
         "trains": plan,
     }
@@ -466,6 +476,60 @@ def _station_coords(stop_id: str) -> tuple[float, float] | None:
     return hit[:2] if hit else None
 
 
+# --- Campus gates ---
+# Columbia limits campus entry and exit to a few gates, so a walk that crosses the campus
+# boundary has to go through one. Hours use the same format as FOOD_SPOTS. Coordinates are
+# approximate: check them on a map. To add a gate, copy a dict.
+CAMPUS_GATES = [
+    {"name": "116th & Broadway gate", "coords": (40.8077, -73.9635), "hours": [(_ALL, "0:00", "24:00")],
+     "id_to_enter": True, "id_to_exit": False},
+    {"name": "116th & Amsterdam gate", "coords": (40.8066, -73.9600), "hours": [(_ALL, "0:00", "24:00")],
+     "id_to_enter": True, "id_to_exit": False},
+    {"name": "120th & Broadway gate", "coords": (40.8100, -73.9619), "hours": [(_ALL, "0:00", "24:00")],
+     "id_to_enter": True, "id_to_exit": False},
+]
+
+# Main campus = Broadway to Amsterdam, 114th to 120th, in a frame rotated to the Manhattan grid.
+_GRID_ORIGIN = CAMPUS_GATES[0]["coords"]
+_GRID_ANGLE = math.radians(29)
+_CAMPUS_X = (-15, 335)   # meters along the streets, from the Broadway gate eastward
+_CAMPUS_Y = (-170, 330)  # meters along the avenues, from 116th northward
+
+
+def _on_campus(p: tuple[float, float]) -> bool:
+    dx = (p[1] - _GRID_ORIGIN[1]) * math.cos(math.radians(_GRID_ORIGIN[0])) * 111_320
+    dy = (p[0] - _GRID_ORIGIN[0]) * 110_574
+    x = dx * math.cos(_GRID_ANGLE) - dy * math.sin(_GRID_ANGLE)
+    y = dx * math.sin(_GRID_ANGLE) + dy * math.cos(_GRID_ANGLE)
+    return _CAMPUS_X[0] <= x <= _CAMPUS_X[1] and _CAMPUS_Y[0] <= y <= _CAMPUS_Y[1]
+
+
+def _route(a: tuple[float, float], b: tuple[float, float]) -> tuple[float, float, dict | None]:
+    """(meters, minutes, gate_info). Crossing the campus boundary goes through the best open gate."""
+    direct_m, direct_min = _straight_walk(a, b)
+    a_in, b_in = _on_campus(a), _on_campus(b)
+    if a_in == b_in:
+        return direct_m, direct_min, None
+    now = _now()
+    open_gates = [g for g in CAMPUS_GATES if _open_status(g["hours"], now)[0]]
+    if not open_gates:
+        return direct_m, direct_min, {"note": "All campus gates are closed right now; time shown ignores gates."}
+    best = None
+    for g in open_gates:
+        m1, _ = _straight_walk(a, g["coords"])
+        m2, _ = _straight_walk(g["coords"], b)
+        if best is None or m1 + m2 < best[0]:
+            best = (m1 + m2, g)
+    meters, gate = best
+    entering = b_in
+    return meters, meters / WALK_M_PER_MIN, {
+        "gate": gate["name"],
+        "action": "enter" if entering else "exit",
+        "needs_id": gate["id_to_enter"] if entering else gate["id_to_exit"],
+        "adds_minutes": max(0, round((meters - direct_m) / WALK_M_PER_MIN)),
+    }
+
+
 def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_price: int = 3,
                         station: str = "116 St-Columbia University", route: str = "") -> str:
     """Cafes/food near campus the user can stop at and STILL catch a train, with when to leave."""
@@ -516,8 +580,8 @@ def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_pr
     for spot in FOOD_SPOTS:
         if (kind != "any" and kind not in spot["kinds"]) or spot["price"] > max_price:
             continue
-        walk_in = _walk_minutes(origin[:2], spot["coords"])[1]
-        walk_out = _walk_minutes(spot["coords"], station_coords)[1]
+        _, walk_in, gate_in = _route(origin[:2], spot["coords"])
+        _, walk_out, _ = _route(spot["coords"], station_coords)
         total = walk_in + spot["order_min"] + walk_out + STATION_BUFFER_MIN
         arrive_dt = now_dt + timedelta(minutes=walk_in)
         is_open, left = _open_status(spot["hours"], arrive_dt)
@@ -530,7 +594,7 @@ def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_pr
         slack = (t["_ts"] - now_ts) / 60 - total
         leave = t["_ts"] - (total + 1) * 60 if slack >= 2 else now_ts
         options.append({
-            "place": spot["name"], "price": "$" * spot["price"], "vibe": spot["vibe"],
+            "place": spot["name"], "via_gate": gate_in, "price": "$" * spot["price"], "vibe": spot["vibe"],
             "our_rating": spot["rating"], "closes_in_min": left if left < 120 else None,
             "walk_there_min": math.ceil(walk_in), "est_wait_min": spot["order_min"],
             "catches_train": f"{t['route']} at {t['arrives_at']}",
@@ -632,7 +696,8 @@ def sun_spots(event: str = "sunset", start: str = "Columbia") -> str:
     for spot in SUN_SPOTS:
         if spot["faces"] != horizon:
             continue
-        walk = math.ceil(_walk_minutes(origin[:2], spot["coords"])[1])
+        _, walk_f, gate = _route(origin[:2], spot["coords"])
+        walk = math.ceil(walk_f)
         leave_ts = ev.timestamp() - (walk + ARRIVE_EARLY_MIN) * 60
         if leave_ts >= time.time():
             status = f"leave by {_clock(leave_ts)}" + (" tomorrow" if ev.date() > now.date() else "")
@@ -640,7 +705,8 @@ def sun_spots(event: str = "sunset", start: str = "Columbia") -> str:
             spare = round((ev.timestamp() - time.time()) / 60 - walk)
             status = (f"leave now; you'd arrive about {spare} min before {event}" if spare > 0
                       else f"you'd arrive after {event}")
-        spots.append({"place": spot["name"], "walk_min": walk, "plan": status, "note": spot["note"]})
+        spots.append({"place": spot["name"], "walk_min": walk, "via_gate": gate, "plan": status,
+                      "note": spot["note"]})
     spots.sort(key=lambda s: s["walk_min"])
 
     is_tomorrow = ev.date() > now.date()
