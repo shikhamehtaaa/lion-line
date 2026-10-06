@@ -18,7 +18,7 @@ All data sources are free and need no API key.
 | `get_subway_alerts` | Active delays, suspensions and planned work for any subway route. | MTA alerts feed |
 | `get_weather` | Temperature, feels-like, wind and max rain chance over the next 4 hours. | Open-Meteo |
 | `coffee_before_train` | Finds open cafes/food spots you can stop at and still catch a train while considering campus entrances and exits: walk there, estimated wait, walk to the station, checked against live arrivals. Says when to leave and how much extra waiting the stop costs vs. going straight to the platform. Displays map of route | Cafe/Restaurants table (hours, price, rating) + MTA GTFS-realtime + campus gate table |
-| `sun_spots` | Next sunrise/sunset, a sky-quality outlook (vivid / decent / clean but plain / poor) from cloud layers and rain chance, feels-like temperature, and nearby viewpoints with walk time and when to leave. | Open-Meteo + hand-picked viewpoints |
+| `sun_spots` | Next sunrise/sunset, a sky-quality outlook (vivid / decent / clean but plain / poor) from cloud layers and rain chance, feels-like temperature, and nearby viewpoints with walk time and when to leave. | Open-Meteo + viewpoints (sun-spots table) |
 
 All tools return JSON. If something goes wrong, the tool returns an error and a hint, such as retrying with a recognized campus building, asking the user for their direction, or letting the user know that the MTA feed is unavailable. This lets the agent handle bad inputs and API/network issues without crashing.
 
