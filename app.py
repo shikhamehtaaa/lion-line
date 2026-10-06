@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from tools import TOOLS, run_tool
 
-# configs
+# --- Config ---
 
 SYSTEM_PROMPT = """You are Lion Line, a commute helper for Columbia and Barnard students in \
 Morningside Heights, NYC. The home station is 116 St-Columbia University on the 1 train.
@@ -22,14 +22,16 @@ How to work:
 - Never guess train times, delays or weather. Use the tools; they return live data.
 - "When's the next train" -> get_next_trains. "Can I make it / when should I leave" -> \
 catch_the_train (ask uptown or downtown if the user hasn't said). "Is the 1 running / \
-delays" -> get_subway_alerts. Walking between buildings -> estimate_walk. Umbrella, \
+delays" -> get_subway_alerts. Walking between buildings -> estimate_walk (pass arrive_by when the user \
+has a deadline and trust its can_make_it; don't do the time math yourself). Umbrella, \
 jacket, or walk-vs-train questions -> get_weather. Coffee/food on the way to the train -> \
 coffee_before_train (needs where they are and uptown/downtown). Sunset/sunrise, "where to \
 watch it" or "will it be pretty" -> sun_spots.
 - Before recommending a subway trip, check get_subway_alerts for that route.
 - Walks that cross the campus boundary go through Columbia's gates (116th & Broadway, 116th & \
-Amsterdam, 120th & Broadway). When a result has via_gate, name the gate; if needs_id is true, \
-remind the user to have their ID ready. Entering needs ID, exiting doesn't.
+Amsterdam, 120th & Broadway). Mention a gate or ID only when the tool result you just got has \
+gate_needed true: name its via_gate, and if needs_id is true, remind the user to have their ID \
+ready. If gate_needed is false, say nothing about gates or ID, even if an earlier answer did.
 - Remember what the user told you earlier (where they are, where they're headed) and \
 reuse it instead of asking again.
 - If a tool returns an error, follow its hint: retry with better arguments or tell the \
@@ -42,7 +44,7 @@ user plainly what's unavailable.
 MODEL = os.environ.get("MODEL", "vertex_ai/gemini-3.5-flash-lite")
 MAX_TOOL_ROUNDS = 6
 
-# The Harness
+# --- The Harness ---
 
 
 def run_agent(messages: list[dict]) -> tuple[str, list[dict]]:
@@ -90,6 +92,7 @@ def run_agent(messages: list[dict]) -> tuple[str, list[dict]]:
                 result = json.dumps({"error": "Tool arguments were not valid JSON. Retry with a JSON object."})
             tool_calls += [{"name": call.function.name, "args": args, "result": result}]
 
+            # The map payload is for the UI only; don't spend the model's context on coordinates.
             model_result = result
             try:
                 parsed = json.loads(result)
@@ -102,12 +105,12 @@ def run_agent(messages: list[dict]) -> tuple[str, list[dict]]:
     return "Sorry, I hit my tool-call limit before finishing.", tool_calls
 
 
-# session store
+# --- Session Store ---
 
 # session_id -> list of messages. In-memory, single process.
 sessions: dict[str, list] = {}
 
-# FastAPI app
+# --- FastAPI App ---
 
 app = FastAPI()
 
@@ -144,6 +147,7 @@ def chat(request: ChatRequest):
     try:
         response, tool_calls = run_agent(sessions[session_id])
     except Exception as e:
+        # Auth, billing, a model that is not running: show it in the chat, not as a 500.
         response, tool_calls = f"Model call failed: {type(e).__name__}: {str(e)[:300]}", []
 
     return ChatResponse(response=response or "(no response)", session_id=session_id, tool_calls=tool_calls)
@@ -156,4 +160,5 @@ def clear(session_id: str | None = None):
 
 
 if __name__ == "__main__":
+    # Cloud Run tells us which port to listen on; locally this defaults to 8000.
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

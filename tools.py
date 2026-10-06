@@ -20,7 +20,7 @@ from google.transit import gtfs_realtime_pb2
 
 NYC = ZoneInfo("America/New_York")
 
-# Data sources (all free, no key)
+# --- Data sources (all free, no key) ---
 
 MTA_123_FEED = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs"
 MTA_ALERTS_FEED = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json"
@@ -29,7 +29,7 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 # Nominatim's usage policy requires an identifying User-Agent.
 HEADERS = {"User-Agent": "columbia-commuter-agent/1.0 (class project)"}
 
-# Static reference data tables
+# --- Static reference data ---
 
 # Broadway-7th Av line (1/2/3) stations in Manhattan and the Bronx, GTFS stop_id -> name.
 # The 2/3 only stop at the express stations (96, 72, Times Sq, 34, 14, Chambers).
@@ -95,7 +95,7 @@ GRID_FACTOR = 1.25   # streets aren't straight lines; scales crow-flies distance
 STATION_BUFFER_MIN = 1.5  # stairs + OMNY tap + getting to the platform
 
 
-# Helpers
+# --- Helpers ---
 
 
 def _error(message: str, hint: str = "") -> str:
@@ -137,6 +137,10 @@ def _resolve_place(place: str) -> tuple[float, float, str] | None:
     for alias, (lat, lon) in PLACES.items():
         if key in alias or alias in key:
             return lat, lon, alias
+    for spot in list(FOOD_SPOTS) + CAMPUS_GATES:  # cafes and gates we already know by name
+        name = spot["name"].lower()
+        if key in name or name in key:
+            return spot["coords"][0], spot["coords"][1], spot["name"]
     r = requests.get(
         NOMINATIM_URL,
         params={
@@ -219,7 +223,7 @@ def _arrivals(stop_id: str, direction: str, route: str = "") -> list[dict]:
     return sorted(out, key=lambda a: a["_ts"])
 
 
-# Tools
+# --- Tools ---
 
 
 def get_next_trains(station: str = "116 St-Columbia University", direction: str = "both",
@@ -292,8 +296,20 @@ def get_subway_alerts(route: str = "1") -> str:
     })
 
 
-def estimate_walk(origin: str, destination: str) -> str:
-    """Walking distance and time between two places around Columbia / NYC."""
+def _parse_clock_today(text: str) -> datetime | None:
+    """Parse '8:00 PM', '8pm' or '20:00' as that time today (New York)."""
+    t = text.strip().upper().replace(".", "")
+    for fmt in ("%I:%M %p", "%I %p", "%I:%M%p", "%I%p", "%H:%M"):
+        try:
+            parsed = datetime.strptime(t, fmt)
+        except ValueError:
+            continue
+        return _now().replace(hour=parsed.hour, minute=parsed.minute, second=0, microsecond=0)
+    return None
+
+
+def estimate_walk(origin: str, destination: str, arrive_by: str = "") -> str:
+    """Walking distance and time between two places, plus whether a deadline can be met."""
     try:
         a = _resolve_place(origin)
         b = _resolve_place(destination)
@@ -307,15 +323,34 @@ def estimate_walk(origin: str, destination: str) -> str:
             "'Broadway and 110th St, New York'.",
         )
     meters, minutes, gate = _route(a[:2], b[:2])
+    walk_min = math.ceil(minutes)
+    now = _now()
+    arrival = now + timedelta(minutes=walk_min)
     result = {
         "from": a[2], "to": b[2],
         "distance_miles": round(meters / 1609, 2),
-        "walk_minutes": math.ceil(minutes),
+        "walk_minutes": walk_min,
         "jog_minutes": math.ceil(meters / JOG_M_PER_MIN),
+        "now": now.strftime("%-I:%M %p"),
+        "arrive_if_leaving_now": arrival.strftime("%-I:%M %p"),
         "note": "Estimate based on straight-line distance adjusted for the street grid.",
     }
+    if arrive_by:
+        deadline = _parse_clock_today(arrive_by)
+        if deadline is None:
+            return _error(f"Couldn't read the time '{arrive_by}'.", "Retry with a time like '8:00 PM'.")
+        if deadline <= now:
+            return _error(f"{arrive_by} has already passed (it's {now.strftime('%-I:%M %p')}).",
+                          "Tell the user that time has passed and ask what time they meant.")
+        slack = math.floor((deadline - arrival).total_seconds() / 60)
+        result["deadline"] = deadline.strftime("%-I:%M %p")
+        result["can_make_it"] = slack >= 0
+        result["slack_minutes"] = slack
+        result["leave_by"] = (deadline - timedelta(minutes=walk_min)).strftime("%-I:%M %p")
+    result["gate_needed"] = bool(gate and "gate" in gate)
     if gate:
         result["via_gate"] = gate
+    result["map"] = _map_payload([(a[2], a[:2], "start"), (b[2], b[:2], "stop")], [gate])
     return json.dumps(result)
 
 
@@ -376,6 +411,7 @@ def catch_the_train(start: str, direction: str, station: str = "116 St-Columbia 
         "direction": "uptown" if d == "N" else "downtown",
         "walk_to_station_minutes": math.ceil(walk_min),
         "via_gate": gate,
+        "gate_needed": bool(gate and "gate" in gate),
         "now": _now().strftime("%-I:%M %p"),
         "trains": plan,
         "map": _map_payload([(origin[2], origin[:2], "start"), (STATIONS[stop_id], station_coords, "station")], [gate]),
@@ -418,8 +454,11 @@ def get_weather(place: str = "Columbia") -> str:
     })
 
 
-# Cafe / food spots for coffee_before_train
-# Hours, prices, ratings and coordinates are approximate
+# --- Cafe / food spots for coffee_before_train ---
+# HAND-CURATED. Hours, prices, ratings and coordinates are approximate and written from
+# general knowledge, not a live source. Verify them on Google Maps and edit freely.
+# To add a spot, copy a dict. hours = [(days, open, close)], days 0=Mon..6=Sun; a close at or
+# before the open time means it runs past midnight. order_min = typical wait to get served.
 _ALL = (0, 1, 2, 3, 4, 5, 6)
 FOOD_SPOTS = [
     {"name": "Hungarian Pastry Shop", "coords": PLACES["hungarian pastry shop"], "kinds": ("coffee", "food"),
@@ -474,7 +513,10 @@ def _station_coords(stop_id: str) -> tuple[float, float] | None:
     return hit[:2] if hit else None
 
 
-# Campus gates (hard-coded entries and exits from knowledge of campus)
+# --- Campus gates ---
+# Columbia limits campus entry and exit to a few gates, so a walk that crosses the campus
+# boundary has to go through one. Hours use the same format as FOOD_SPOTS. Coordinates are
+# approximate: check them on a map. To add a gate, copy a dict.
 CAMPUS_GATES = [
     {"name": "116th & Broadway gate", "coords": (40.8077, -73.9635), "hours": [(_ALL, "0:00", "24:00")],
      "id_to_enter": True, "id_to_exit": False},
@@ -649,7 +691,7 @@ def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_pr
 
 # --- Sunrise / sunset ---
 
-ARRIVE_EARLY_MIN = 15  # added time buffer
+ARRIVE_EARLY_MIN = 15  # get there before the sky starts doing its thing
 # faces = which horizon the spot looks at. Hand-picked; double-check the views in person.
 SUN_SPOTS = [
     {"name": "Riverside Park (Hudson overlook at 116th)", "coords": (40.8101, -73.9692), "faces": "west",
@@ -805,6 +847,7 @@ TOOLS = [
                 "properties": {
                     "origin": {"type": "string", "description": "Starting place, e.g. 'Butler Library' or '350 W 110th St'."},
                     "destination": {"type": "string", "description": "Destination, e.g. 'Mudd' or 'Hungarian Pastry Shop'."},
+                    "arrive_by": {"type": "string", "description": "Optional deadline like '8:00 PM'. Pass it when the user asks if they can make it somewhere by a time; the result then says can_make_it and when to leave."},
                 },
                 "required": ["origin", "destination"],
             },
