@@ -29,7 +29,7 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 # Nominatim's usage policy requires an identifying User-Agent.
 HEADERS = {"User-Agent": "columbia-commuter-agent/1.0 (class project)"}
 
-# --- Static reference data ---
+# Static reference data tables
 
 # Broadway-7th Av line (1/2/3) stations in Manhattan and the Bronx, GTFS stop_id -> name.
 # The 2/3 only stop at the express stations (96, 72, Times Sq, 34, 14, Chambers).
@@ -455,10 +455,6 @@ def get_weather(place: str = "Columbia") -> str:
 
 
 # --- Cafe / food spots for coffee_before_train ---
-# HAND-CURATED. Hours, prices, ratings and coordinates are approximate and written from
-# general knowledge, not a live source. Verify them on Google Maps and edit freely.
-# To add a spot, copy a dict. hours = [(days, open, close)], days 0=Mon..6=Sun; a close at or
-# before the open time means it runs past midnight. order_min = typical wait to get served.
 _ALL = (0, 1, 2, 3, 4, 5, 6)
 FOOD_SPOTS = [
     {"name": "Hungarian Pastry Shop", "coords": PLACES["hungarian pastry shop"], "kinds": ("coffee", "food"),
@@ -513,10 +509,7 @@ def _station_coords(stop_id: str) -> tuple[float, float] | None:
     return hit[:2] if hit else None
 
 
-# --- Campus gates ---
-# Columbia limits campus entry and exit to a few gates, so a walk that crosses the campus
-# boundary has to go through one. Hours use the same format as FOOD_SPOTS. Coordinates are
-# approximate: check them on a map. To add a gate, copy a dict.
+# Campus gates
 CAMPUS_GATES = [
     {"name": "116th & Broadway gate", "coords": (40.8077, -73.9635), "hours": [(_ALL, "0:00", "24:00")],
      "id_to_enter": True, "id_to_exit": False},
@@ -691,8 +684,8 @@ def coffee_before_train(start: str, direction: str, kind: str = "coffee", max_pr
 
 # --- Sunrise / sunset ---
 
-ARRIVE_EARLY_MIN = 15  # get there before the sky starts doing its thing
-# faces = which horizon the spot looks at. Hand-picked; double-check the views in person.
+ARRIVE_EARLY_MIN = 15  # adding buffer time before sunrise/sunset
+# faces = which horizon the spot looks at
 SUN_SPOTS = [
     {"name": "Riverside Park (Hudson overlook at 116th)", "coords": (40.8101, -73.9692), "faces": "west",
      "note": "Open view over the Hudson toward New Jersey; the classic choice."},
